@@ -5,7 +5,7 @@
  * Uncomment only one of these, depending on the board you are running the firmware on
  */
 //#define BOARD_ARDUINO_MEGA
-#define BOARD_ARDUINO_DUE
+//#define BOARD_ARDUINO_DUE
 
 // Baudrate to use when communicating over serial connection
 #define SERIAL_BAUDRATE 56000
@@ -68,7 +68,7 @@
  * Eventually, I hope to get the Dobson one working as well
  */
 #define SERIAL_DISPLAY_ENABLED              // Uncomment this line to enable/disable control via the display unit
-#define SERIAL_DISPLAY_PORT Serial3			// Which Serial port to use. Serial 2 is 16(RX) and 17(TX) on the Mega/Due or 
+#define SERIAL_DISPLAY_PORT Serial1			// Which Serial port to use. Serial 2 is 16(RX) and 17(TX) on the Mega/Due or 
 #define SERIAL_DISPLAY_BAUDRATE       9600  // The baudrate which is used to communicate with the display unit. On the display unit SERIAL_BAUDRATE must have the same value
 
 /*
@@ -95,7 +95,7 @@
  */
 
 // Uncomment the following line to enable various debug features that would otherwise not get compiled into the firmware
-#define DEBUG
+//#define DEBUG // TODO: rename, as this clashes with library defines
 
 // Uncomment the following line to enable sending debug statements via the serial port
 #define DEBUG_SERIAL
@@ -186,8 +186,7 @@
 // The values below are reasonable for the default motor speeds and the respective boards
 #ifdef BOARD_ARDUINO_MEGA
 #define STEPPER_INTERRUPT_FREQ 500 // every 0.5ms
-#endif
-#ifdef BOARD_ARDUINO_DUE
+#else
 #define STEPPER_INTERRUPT_FREQ 100 // every 0.1ms
 #endif
 
@@ -289,6 +288,10 @@ static constexpr cstr past_last_slash(cstr str)
 
 // (Disabled) Prints a debug message line with timestamp, function name, file name and line number. Define the DEBUG and DEBUG_SERIAL constants to enable
 #define DEBUG_PRINTLN_VV(x)
+#endif
+
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 1 // TODO: proper config
 #endif
 
 
