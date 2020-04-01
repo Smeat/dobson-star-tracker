@@ -5,4 +5,6 @@
 /ARM/Debug
 /.vs
 /.idea
-/Debug/*.pio
+/Debug/*
+.pio
+
