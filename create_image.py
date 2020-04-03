@@ -79,7 +79,7 @@ class ImageHeader:
 		self.num_types = num_types
 
 	def pack(self):
-		return struct.pack('>IIII', self.magic_id, self.version, self.type_begin, self.num_types)
+		return struct.pack('<IIII', self.magic_id, self.version, self.type_begin, self.num_types)
 
 class ImageTypeHeader:
 	SIZE = 13
@@ -95,7 +95,7 @@ class ImageTypeHeader:
 		self.num_entries = num_entries
 
 	def pack(self):
-		return struct.pack('>BIII', self.sky_type, self.data_begin, self.name_begin, self.num_entries)
+		return struct.pack('<BIII', self.sky_type, self.data_begin, self.name_begin, self.num_entries)
 
 class ImageEntry:
 	SIZE = 16
@@ -118,7 +118,7 @@ class ImageEntry:
 		return "{}".format(self.mag)
 
 	def pack(self):
-		return struct.pack('>IiihH', self.ID, self.RA, self.dec, self.mag, self.flags)
+		return struct.pack('<IiihH', self.ID, self.RA, self.dec, self.mag, self.flags)
 
 class ImageNameEntry:
 	SIZE = 40
