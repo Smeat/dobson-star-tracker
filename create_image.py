@@ -17,6 +17,16 @@ INDEX_ENTRY_SIZE = 12
 MAGIC_ID = 0x11223344
 VERSION = 0
 
+
+def to_sector(pos):
+	return math.ceil(pos/512)
+
+def to_pos(sector):
+	return sector * 512
+
+def next_sector_pos(pos):
+	return pos + (512 - (pos % 512))
+
 class SkyObjectType(Enum):
 	UNDEFINED = 0
 	STAR = 1
@@ -172,7 +182,7 @@ def parse_kstars_catalog(filename):
 def write_image(outputfilename, objects: List[SkyObject]):
 	objects.sort(key=operator.attrgetter('mag'))
 	with open(outputfilename, "wb") as outfile:
-		image_header = ImageHeader(0, ImageHeader.SIZE)
+		image_header = ImageHeader(0, to_sector(ImageHeader.SIZE))
 		outfile.write(image_header.pack())
 		# gather types
 		types = defaultdict(lambda: [])
@@ -190,9 +200,9 @@ def write_image(outputfilename, objects: List[SkyObject]):
 		data_entry_size = len(objects) * ImageEntry.SIZE
 		data_entry_sectors = math.ceil(data_entry_size / 512)
 
-		type_entry_begin = ImageHeader.SIZE
-		data_entry_begin = type_entry_begin + type_entry_size
-		name_entry_begin = data_entry_begin + data_entry_size
+		type_entry_begin = to_pos(image_header.type_begin)
+		data_entry_begin = next_sector_pos(type_entry_begin + type_entry_size)
+		name_entry_begin = next_sector_pos(data_entry_begin + data_entry_size)
 
 		print("Type entry begins at {} data {} name {}".format(type_entry_begin, data_entry_begin, name_entry_begin))
 
@@ -207,12 +217,12 @@ def write_image(outputfilename, objects: List[SkyObject]):
 			outfile.seek(next_data_entry_begin)
 			for entry, name in e:
 				outfile.write(entry.pack())
-			outfile.seek(512 - (outfile.tell() % 512), 1) # seek to begin of next sector
+			outfile.seek(next_sector_pos(outfile.tell())) # seek to begin of next sector
 			next_data_entry_begin = outfile.tell()
 			outfile.seek(next_name_entry_begin)
 			for entry, name in e:
 				outfile.write(name.pack())
-			outfile.seek(512 - (outfile.tell() % 512), 1) # seek to begin of next sector
+			outfile.seek(next_sector_pos(outfile.tell())) # seek to begin of next sector
 			next_name_entry_begin = outfile.tell()
 
 
