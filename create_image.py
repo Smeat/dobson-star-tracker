@@ -5,6 +5,10 @@ from enum import Enum
 from typing import List
 from collections import defaultdict
 
+from astropy import units as u
+from astropy.coordinates import SkyCoord
+from astroquery.simbad import Simbad
+
 import random
 import operator
 import math
@@ -17,6 +21,9 @@ INDEX_ENTRY_SIZE = 12
 MAGIC_ID = 0x11223344
 VERSION = 0
 
+RA_SCALE = 1000000
+DEC_SCALE = 100000
+MAG_SCALE = 100
 
 def to_sector(pos):
 	return math.ceil(pos/512)
@@ -115,6 +122,9 @@ class SkyObject:
 		self.name = name
 		self.mag = mag
 
+	def __str__(self):
+		return "Skyobject with type {}. RA: {}, DEC: {}, id: {}, name: {}, mag: {}".format(self.objectType, self.RA, self.DEC, self.identifier, self.name, self.mag)
+
 
 def kstars_binary_read_header(catalog):
 	header_text = catalog.read(124)
@@ -155,6 +165,8 @@ def parse_kstars_binary(filename, starname_file = "/usr/share/kstars/starnames.d
 				offset = catalog.tell()
 				star_data = struct.unpack('iiiiiihhhbb', catalog.read(32))
 				print("Star data: {}".format(star_data))
+				shortname = b""
+				longname = b""
 				if star_data[9] & 0x01:
 					print("has name!")
 					shortname = struct.unpack('8s', starnames.read(8))[0]
@@ -228,12 +240,46 @@ def write_image(outputfilename, objects: List[SkyObject]):
 
 		print("type entry size {} takes {} sectors. data entry size {} takes {} sectors".format(type_entry_size, type_entry_sectors, data_entry_size, data_entry_sectors))
 
+def get_catalog(name):
+	sky_objects = []
+	Simbad.add_votable_fields('flux(V)')
+	print("Downloading data for {}...".format(name))
+	messier_data = Simbad.query_catalog(name)
+	print("done")
+	#messier_data = Simbad.query_object("m31")
+	for result in messier_data:
+		try: # skip any missing data
+			coord = SkyCoord(result["RA"], result["DEC"], unit=(u.deg, u.deg))
+			ra = math.floor(coord.ra.degree*RA_SCALE + 0.5)
+			dec = math.floor(coord.dec.degree*DEC_SCALE + 0.5)
+			mag = math.floor(result["FLUX_V"]*MAG_SCALE + 0.5)
+			# get a proper name
+			name_table = Simbad.query_objectids(result["MAIN_ID"].decode("utf-8"))
+			name = ""
+			for row in name_table:
+				row_str = str(row)
+				if "NAME" in row_str:
+					name = row_str.split('\n')[-1].split(' ', 1)[-1]
+					break;
+			obj = SkyObject(RA=ra, DEC=dec,identifier=result["MAIN_ID"], name=name.encode("utf-8"), mag=mag)
+			sky_objects.append(obj)
+		except ValueError as e:
+			pass
+
+	return sky_objects
 
 
 if __name__ == "__main__":
 	parser = ArgumentParser(formatter_class=RawTextHelpFormatter)
-	parser.add_argument("-i", "--input", dest="input", help="Path to input file", type=str, required=True)
+	parser.add_argument("-i", "--input", dest="input", action="append", help="Path to input file", type=str)
+	parser.add_argument("-c", "--catalog", dest="catalogs", action="append", help="Catalog to download", type=str)
 	args = parser.parse_args()
-
-	kstars_data = parse_kstars_binary(args.input)
-	write_image("/tmp/test", kstars_data)
+	sky_data = []
+	if(args.catalogs is not None):
+		for catalog in args.catalogs:
+			sky_data += get_catalog(catalog)
+	if args.input is not None:
+		for data_file in args.input:
+			sky_data += parse_kstars_binary(data_file)
+	# TODO: remove duplicates
+	write_image("/tmp/test", sky_data)
