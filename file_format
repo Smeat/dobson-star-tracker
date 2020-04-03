@@ -1,0 +1,18 @@
+# File Header #
+magic_id uint32
+version uint32_t
+list_begin_sector uint32_t
+
+# type lists #
+type uint8_t 
+sector_begin uint32_t 
+name_begin_sector uint32_t
+
+# Entry (begins on a sector) #
+id uint32
+type uint8
+ra int32
+dec int32 
+mag int16
+flags uint8_t
+total size: 16 -> 32 entries per block
