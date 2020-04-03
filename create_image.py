@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser, RawTextHelpFormatter
-from enum import Enum
+from enum import IntEnum
 from typing import List
 from collections import defaultdict
 
@@ -34,41 +34,68 @@ def to_pos(sector):
 def next_sector_pos(pos):
 	return pos + (512 - (pos % 512))
 
-class SkyObjectType(Enum):
-	UNDEFINED = 0
-	STAR = 1
-	GALAXY = 2
-	CLUSTER_GLOBULAR = 3
-	CLUSTER_OPEN = 4
-	NEBULA = 5
+
+
+class SkyObjectType(IntEnum):
+	EMPTY = 0
+	UNSPECIFIED = 1
+	STAR = 2
+	GALAXY = 3
+	CLUSTER_GLOBULAR = 4
+	CLUSTER_OPEN = 5
+	NEBULA = 6
+	INTERACTING_GALAXY = 7
+	CLUSTER = 8
+
+def simbad_type(sim_type: str):
+	sky_obj_type = SkyObjectType.UNSPECIFIED
+
+	if sim_type == "GlC":
+		sky_obj_type = SkyObjectType.CLUSTER_GLOBULAR
+	elif sim_type == "G" or sim_type == "LIN":
+		sky_obj_type = SkyObjectType.GALAXY
+	elif sim_type == "OpC":
+		sky_obj_type = SkyObjectType.CLUSTER_OPEN
+	elif sim_type == "IG":
+		sky_obj_type = SkyObjectType.INTERACTING_GALAXY
+	elif sim_type == "Cl*":
+		sky_obj_type = SkyObjectType.CLUSTER
+		
+
+	return sky_obj_type
+
 
 class ImageHeader:
-	SIZE = 12
+	SIZE = 16
 	magic_id: int
 	version: int
 	type_begin: int
+	num_types: int
 
-	def __init__(self, version, type_begin):
+	def __init__(self, version, type_begin, num_types):
 		self.magic_id = MAGIC_ID
 		self.version = version
 		self.type_begin = type_begin
+		self.num_types = num_types
 
 	def pack(self):
-		return struct.pack('>III', self.magic_id, self.version, self.type_begin)
+		return struct.pack('>IIII', self.magic_id, self.version, self.type_begin, self.num_types)
 
 class ImageTypeHeader:
-	SIZE = 9
+	SIZE = 13
 	sky_type: SkyObjectType
 	data_begin: int
 	name_begin: int
+	num_entries: int
 
-	def __init__(self, sky_type, data_begin, name_begin):
+	def __init__(self, sky_type, data_begin, name_begin, num_entries):
 		self.sky_type = sky_type
 		self.data_begin = data_begin
 		self.name_begin = name_begin
+		self.num_entries = num_entries
 
 	def pack(self):
-		return struct.pack('>BII', self.sky_type, self.data_begin, self.name_begin)
+		return struct.pack('>BIII', self.sky_type, self.data_begin, self.name_begin, self.num_entries)
 
 class ImageEntry:
 	SIZE = 16
@@ -194,8 +221,6 @@ def parse_kstars_catalog(filename):
 def write_image(outputfilename, objects: List[SkyObject]):
 	objects.sort(key=operator.attrgetter('mag'))
 	with open(outputfilename, "wb") as outfile:
-		image_header = ImageHeader(0, to_sector(ImageHeader.SIZE))
-		outfile.write(image_header.pack())
 		# gather types
 		types = defaultdict(lambda: [])
 		names = []
@@ -205,6 +230,8 @@ def write_image(outputfilename, objects: List[SkyObject]):
 			types[o.objectType].append([entry, name_entry])
 			names.append(name_entry)
 		# they should already be sorted by mag
+		image_header = ImageHeader(0, to_sector(ImageHeader.SIZE), len(types.keys()))
+		outfile.write(image_header.pack())
 
 		# total size for all type entries
 		type_entry_size = len(types.keys()) * ImageTypeHeader.SIZE
@@ -222,10 +249,13 @@ def write_image(outputfilename, objects: List[SkyObject]):
 		outfile.seek(type_entry_begin)
 		next_data_entry_begin = data_entry_begin
 		next_name_entry_begin = name_entry_begin
+		type_pos = type_entry_begin
 		for t, e in types.items():
-			type_list = ImageTypeHeader(t, next_data_entry_begin >> 9, next_name_entry_begin >> 9)
+			outfile.seek(type_pos)
+			type_list = ImageTypeHeader(t, to_sector(next_data_entry_begin), to_sector(next_name_entry_begin), len(e))
 			print("Writing type header at pos: {}".format(outfile.tell()))
 			outfile.write(type_list.pack())
+			type_pos = outfile.tell()
 			outfile.seek(next_data_entry_begin)
 			for entry, name in e:
 				outfile.write(entry.pack())
@@ -243,6 +273,7 @@ def write_image(outputfilename, objects: List[SkyObject]):
 def get_catalog(name):
 	sky_objects = []
 	Simbad.add_votable_fields('flux(V)')
+	Simbad.add_votable_fields('otype(3)')
 	print("Downloading data for {}...".format(name))
 	messier_data = Simbad.query_catalog(name)
 	print("done")
@@ -261,7 +292,7 @@ def get_catalog(name):
 				if "NAME" in row_str:
 					name = row_str.split('\n')[-1].split(' ', 1)[-1]
 					break;
-			obj = SkyObject(RA=ra, DEC=dec,identifier=result["MAIN_ID"], name=name.encode("utf-8"), mag=mag)
+			obj = SkyObject(RA=ra, DEC=dec,identifier=result["MAIN_ID"], name=name.encode("utf-8"), mag=mag, objectType=simbad_type(result["OTYPE_3"].decode("utf-8")))
 			sky_objects.append(obj)
 		except ValueError as e:
 			pass
